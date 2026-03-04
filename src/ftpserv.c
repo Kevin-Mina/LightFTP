@@ -3,7 +3,7 @@
  *
  *  Created on: Aug 20, 2016
  *
- *  Modified on: Feb 14, 2026
+ *  Modified on: Mar 04, 2026
  *
  *      Author: lightftp
  */
@@ -53,7 +53,7 @@ static const ftproutine_entry *ftpcmd_lookup(const char *cmd, size_t cmdlen)
     ftproutine_entry key;
     char cmdbuf[8];
 
-    if (cmdlen == 0 || cmdlen >= sizeof(cmdbuf))
+    if ((cmdlen == 0) || (cmdlen >= sizeof(cmdbuf)))
         return NULL;
 
     memcpy(cmdbuf, cmd, cmdlen);
@@ -625,7 +625,7 @@ void *list_thread(pthcontext tctx)
     client_socket = create_datasocket(context);
     while (client_socket != INVALID_SOCKET)
     {
-        if (context->tls_session != NULL)
+        if (context->data_protection_level != 0)
             if (!ftp_init_tls_session(&TLS_datasession, client_socket, 0))
                 break;
         
@@ -789,7 +789,7 @@ void *retr_thread(pthcontext tctx)
         if (client_socket == INVALID_SOCKET)
             break;
 
-        if (context->tls_session != NULL)
+        if (context->data_protection_level != 0)
         {
             if (!ftp_init_tls_session(&TLS_datasession, client_socket, 0))
                 break;
@@ -1228,7 +1228,7 @@ void *stor_thread(pthcontext tctx)
         if (client_socket == INVALID_SOCKET)
             break;
 
-        if (context->tls_session != NULL)
+        if (context->data_protection_level != 0)
         {
             if (!ftp_init_tls_session(&TLS_datasession, client_socket, 0))
                 break;

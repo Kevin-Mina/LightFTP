@@ -3,7 +3,7 @@
  *
  *  Created on: Aug 20, 2016
  *
- *  Modified on: Mar 04, 2026
+ *  Modified on: Mar 10, 2026
  *
  *      Author: lightftp
  */
@@ -14,15 +14,17 @@
 #include "inc/fspathtools.h"
 #include "inc/sha256sum.h"
 
-static const ftproutine_entry ftpprocs[MAX_CMDS] = {
+/* Must remain sorted alphabetically by command name, used by bsearch() in ftpcmd_lookup. */
+static const ftproutine_entry ftpprocs[] = {
         {"ABOR", ftpABOR}, {"APPE", ftpAPPE}, {"AUTH", ftpAUTH}, {"CDUP", ftpCDUP},
         {"CWD",  ftpCWD }, {"DELE", ftpDELE}, {"EPSV", ftpEPSV}, {"FEAT", ftpFEAT},
         {"HELP", ftpHELP}, {"LIST", ftpLIST}, {"MKD",  ftpMKD }, {"MLSD", ftpMLSD},
-        {"NOOP", ftpNOOP}, {"OPTS", ftpOPTS}, {"PASS", ftpPASS}, {"PASV", ftpPASV},
-        {"PBSZ", ftpPBSZ}, {"PORT", ftpPORT}, {"PROT", ftpPROT}, {"PWD",  ftpPWD },
-        {"QUIT", ftpQUIT}, {"REST", ftpREST}, {"RETR", ftpRETR}, {"RMD",  ftpRMD },
-        {"RNFR", ftpRNFR}, {"RNTO", ftpRNTO}, {"SITE", ftpSITE}, {"SIZE", ftpSIZE},
-        {"STOR", ftpSTOR}, {"SYST", ftpSYST}, {"TYPE", ftpTYPE}, {"USER", ftpUSER}
+        {"MODE", ftpMODE}, {"NOOP", ftpNOOP}, {"OPTS", ftpOPTS}, {"PASS", ftpPASS},
+        {"PASV", ftpPASV}, {"PBSZ", ftpPBSZ}, {"PORT", ftpPORT}, {"PROT", ftpPROT},
+        {"PWD",  ftpPWD }, {"QUIT", ftpQUIT}, {"REST", ftpREST}, {"RETR", ftpRETR},
+        {"RMD",  ftpRMD }, {"RNFR", ftpRNFR}, {"RNTO", ftpRNTO}, {"SITE", ftpSITE},
+        {"SIZE", ftpSIZE}, {"STOR", ftpSTOR}, {"STRU", ftpSTRU}, {"SYST", ftpSYST},
+        {"TYPE", ftpTYPE}, {"USER", ftpUSER}
 };
 
 void *mlsd_thread(pthcontext tctx);
@@ -61,7 +63,8 @@ static const ftproutine_entry *ftpcmd_lookup(const char *cmd, size_t cmdlen)
     key.name = cmdbuf;
     key.proc = NULL;
 
-    return (const ftproutine_entry *)bsearch(&key, ftpprocs, MAX_CMDS, sizeof(ftpprocs[0]), ftpcmd_compare);
+    return (const ftproutine_entry *)bsearch(&key, ftpprocs, 
+        sizeof(ftpprocs) / sizeof(ftpprocs[0]), sizeof(ftpprocs[0]), ftpcmd_compare);
 }
 
 static void cleanup_handler(void *arg)
@@ -330,17 +333,17 @@ ssize_t ftpUSER(pftp_context context, const char *params)
     const char *cp;
 
     if ( params == NULL )
-        return (int)sendstring(context, error501);
+        return sendstring(context, error501);
 
     /* 
         Defence-in-depth
-        Validate that no control character exists in the username
+        Validate that no control character (including DEL) exists in the username
         before echoing it into the response   
     */
     for (cp = params; *cp != 0; ++cp)
     {
-        if ((unsigned char)*cp < 0x20)
-            return (int)sendstring(context, error501);
+        if ( ((unsigned char)*cp < 0x20) || ((unsigned char)*cp == 0x7f) )
+            return sendstring(context, error501);
     }
 
     context->access = FTP_ACCESS_NOT_LOGGED_IN;
@@ -403,6 +406,12 @@ ssize_t ftpTYPE(pftp_context context, const char *params)
     case 'I':
     case 'i':
         return sendstring(context, success200_2);
+
+    case 'L':
+    case 'l':
+    case 'E':
+    case 'e':
+        return sendstring(context, error504);
 
     default:
         return sendstring(context, error501);
@@ -1116,18 +1125,28 @@ ssize_t ftpPASS(pftp_context context, const char *params)
 
 ssize_t ftpREST(pftp_context context, const char *params)
 {
-    char text[PATH_MAX];
+    char                text[PATH_MAX];
+    const char          *cp;
+    unsigned long long  value;
 
     if ( context->access == FTP_ACCESS_NOT_LOGGED_IN )
         return sendstring(context, error530);
 
-    if ( params == NULL )
+    if ( params == NULL || *params == 0 )
         return sendstring(context, error501);
 
-    context->rest_point = (off_t)strtoull(params, NULL, 10);
+    for (cp = params; *cp != 0; ++cp)
+    {
+        if ((*cp < '0') || (*cp > '9'))
+            return sendstring(context, error501);
+    }
+
+    value = strtoull(params, NULL, 10);
+    context->rest_point = (off_t)value;
+
     snprintf(text, sizeof(text),
             "350 REST supported. Ready to resume at byte offset %llu\r\n",
-            (unsigned long long int)context->rest_point);
+            value);
 
     return sendstring(context, text);
 }
@@ -1348,6 +1367,52 @@ ssize_t ftpSYST(pftp_context context, const char *params)
 {
 	__attribute__((unused)) const char *un = params;
     return sendstring(context, success215);
+}
+
+ssize_t ftpMODE(pftp_context context, const char *params)
+{
+    if ( context->access == FTP_ACCESS_NOT_LOGGED_IN )
+        return sendstring(context, error530);
+
+    if ( params == NULL )
+        return sendstring(context, error501);
+
+    switch (*params)
+    {
+    case 'S':
+    case 's':
+    case 'B':
+    case 'b':
+    case 'C':
+    case 'c':
+        return sendstring(context, error502);
+
+    default:
+        return sendstring(context, error501);
+    }
+}
+
+ssize_t ftpSTRU(pftp_context context, const char *params)
+{
+    if ( context->access == FTP_ACCESS_NOT_LOGGED_IN )
+        return sendstring(context, error530);
+
+    if ( params == NULL )
+        return sendstring(context, error501);
+
+    switch (*params)
+    {
+    case 'F':
+    case 'f':
+    case 'R':
+    case 'r':
+    case 'P':
+    case 'p':
+        return sendstring(context, error502);
+
+    default:
+        return sendstring(context, error501);
+    }
 }
 
 ssize_t ftpHELP(pftp_context context, const char *params)

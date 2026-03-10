@@ -3,7 +3,7 @@
  *
  *  Created on : May 15, 2020
  *
- *  Modified on: Jul 25, 2025
+ *  Modified on: Mar 10, 2026
  *
  *      Author: lightftp
  */
@@ -19,7 +19,7 @@ const char success211[] =
 
 const char success214[] =
 		"214-The following commands are recognized.\r\n"
-		" ABOR APPE AUTH CDUP CWD  DELE EPSV FEAT HELP LIST MKD MLSD NOOP OPTS\r\n"
-		" PASS PASV PBSZ PORT PROT PWD  QUIT REST RETR RMD RNFR RNTO SITE SIZE\r\n"
-		" STOR SYST TYPE USER\r\n"
+		" ABOR APPE AUTH CDUP CWD DELE EPSV FEAT HELP LIST MKD MLSD MODE NOOP\r\n"
+		" OPTS PASS PASV PBSZ PORT PROT PWD QUIT REST RETR RMD RNFR RNTO SITE\r\n"
+		" SIZE STOR STRU SYST TYPE USER\r\n"
 		"214 Help OK.\r\n";
